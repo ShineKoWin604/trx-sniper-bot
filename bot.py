@@ -15,7 +15,6 @@ def home():
     return "Kyaltaryar Formula Bot is Running Online!"
 
 def run_flask():
-    # Render သည် ပုံမှန်အားဖြင့် Port 10000 သို့မဟုတ် ၎င်းသတ်မှတ်ပေးသော Port ကို သုံးသည်
     import os
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
@@ -31,7 +30,7 @@ MY_ID = "-1004311270361"
 API = "https://draw.ar-lottery01.com/TrxWinGo/TrxWinGo_1M/GetHistoryIssuePage.json"
 X_MULTIPLIERS = [1, 3, 9, 27, 81, 243, 729] 
 
-# 📋 တောင်းဆိုထားသော ပုံသေ Formula ပတ်လမ်း (B = BIG, S = SMALL)
+# 📋 BBSBSSSBSB ဖော်မြူလာ အစီအစဉ်အတိုင်း အတိအကျ
 FORMULA_PATTERN = ["BIG", "BIG", "SMALL", "BIG", "SMALL", "SMALL", "SMALL", "BIG", "SMALL", "BIG"]
 
 class KyaltaryarFormulaEngine:
@@ -40,9 +39,7 @@ class KyaltaryarFormulaEngine:
         self.last_pred_val = None   
         self.users = {str(MY_ID): 0} 
         self.last_update_id = 0
-        
-        # --- 📊 Formula Settings ---
-        self.formula_index = 0  # Formula ရဲ့ ဘယ်နေရာရောက်နေလဲ မှတ်ရန်
+        self.formula_index = 0  
         
         # --- 📊 Stats Tracking ---
         self.total_predictions = 0
@@ -74,13 +71,6 @@ class KyaltaryarFormulaEngine:
             print(f"📡 API Fetch Error: {e}")
             return None, None
 
-    def get_next_formula_prediction(self):
-        # Formula အတိုင်း တစ်ခုချင်းစီ ထုတ်ပေးမည့် လုပ်ဆောင်ချက်
-        pred = FORMULA_PATTERN[self.formula_index]
-        # နောက်တစ်ကြိမ်အတွက် index တိုးမည်၊ အဆုံးရောက်ရင် ၀ ပြန်စမည်
-        self.formula_index = (self.formula_index + 1) % len(FORMULA_PATTERN)
-        return pred
-
     def sync_users(self):
         try:
             url = f"https://api.telegram.org/bot{TOKEN}/getUpdates?offset={self.last_update_id + 1}&timeout=2"
@@ -104,16 +94,19 @@ class KyaltaryarFormulaEngine:
 def bot_main_loop():
     bot = KyaltaryarFormulaEngine()
     print("⚡ Kyaltaryar Formula Bot Engine Online...")
+    
+    # စဖွင့်ချင်း လက်ရှိပတ်လမ်းကို မှတ်သားသည်
     bot.last_period, _ = bot.fetch_latest_results()
-
-    # ပထမဆုံးအကြိမ် Predict တစ်ခုကို ကြိုထုတ်ထားမည်
-    bot.last_pred_val = bot.get_next_formula_prediction()
+    
+    # ပထမဆုံး စတင်မည့် Predict ကို Formula ရဲ့ အစ (Index 0 = BIG) ကနေ ယူလိုက်သည်
+    bot.last_pred_val = FORMULA_PATTERN[bot.formula_index]
 
     while True:
         try:
             bot.sync_users()
             curr_p, actual_bs = bot.fetch_latest_results()
 
+            # ပတ်လမ်း (Period) အသစ်တစ်ခု ထွက်လာပြီဆိုလျှင်
             if curr_p and curr_p != bot.last_period:
                 bot.round_count += 1
                 
@@ -143,8 +136,9 @@ def bot_main_loop():
                         for uid in list(bot.users.keys()):
                             bot.users[uid] = min(bot.users[uid] + 1, len(X_MULTIPLIERS)-1)
 
-                # နောက်ထပ် Period အတွက် Formula အတိုင်း Predict အသစ် ထုတ်ယူခြင်း
-                bot.last_pred_val = bot.get_next_formula_prediction()
+                # 🔄 Period အသစ်အတွက် Formula Index ကို နောက်တစ်ခု တိုးလိုက်သည် (၉ ရောက်ရင် ၀ ပြန်စမည်)
+                bot.formula_index = (bot.formula_index + 1) % len(FORMULA_PATTERN)
+                bot.last_pred_val = FORMULA_PATTERN[bot.formula_index]
                 bot.last_period = curr_p
                 
                 def build_custom_msg():
@@ -152,13 +146,13 @@ def bot_main_loop():
                     current_step = bot.users.get(str(MY_ID), 0)
                     display_multiplier = f"<b>[ {X_MULTIPLIERS[current_step]}x ]</b>" 
                     
+                    # တောင်းဆိုချက်အရ Pattern စာကြောင်းကို လုံးဝဖြုတ်ထားပါသည်
                     return (
                         "=======================\n"
                         "🎮 <b>GAME: GLOBAL TRX</b> 🎮\n"
                         "=======================\n"
                         f"Period : <code>{next_period_num}</code>\n"
                         f"Predict : <b>{bot.last_pred_val}</b> ➔  {display_multiplier}\n" 
-                        f"Pattern : <code>FORMULA FIXED MODE</code>\n" 
                         "=======================\n"
                         f"⚠️ MAX LOSE STREAK : {bot.max_lose_streak}"
                     )
@@ -174,10 +168,8 @@ def bot_main_loop():
 
 # --- 🏁 START BOTH FLASK & BOT ---
 if __name__ == "__main__":
-    # Flask ကို Background Thread အဖြစ် Run ပါမည်
     flask_thread = Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
     
-    # Bot Main Engine ကို Run ပါမည်
     bot_main_loop()
