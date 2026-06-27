@@ -1,238 +1,222 @@
-import urllib.request
-import urllib.parse
-import json
-import time
-import ssl
-import random
 import os
+import subprocess
+import sys
 from threading import Thread
 from flask import Flask
+from telebot import TeleBot, types
 
-# --- 🌐 FLASK WEB SERVER FOR RENDER ---
+# --- FLASK WEB SERVER SETTING ---
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "⚡ Kyaltaryar Mobile Engine is Running smoothly 24/7! 🚀"
+    return "Bot is running online perfectly!"
 
 def run_flask():
-    # Render သည် ၎င်း၏ PORT environment variable ကို အသုံးပြု၍ port သတ်မှတ်ပေးလေ့ရှိသည်
+    # Render က ပေးမယ့် PORT ကို ဖတ်မယ်၊ မရှိရင် 8080 ကို သုံးမယ်
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
 def keep_alive():
+    # Flask server ကို background thread အနေနဲ့ လှမ်း run တာဖြစ်ပါတယ်
     t = Thread(target=run_flask)
-    t.daemon = True
     t.start()
 
-# --- 🤖 GAME ENGINE ENGINE CODE ---
-ctx = ssl.create_default_context()
-ctx.check_hostname = False
-ctx.verify_mode = ssl.CERT_NONE
+# --- TELEGRAM BOT CONFIGURATION ---
+BOT_TOKEN = '8938971304:AAG_YGMBDMJjwjF7Yuny_qiaqM7zgWP_qP8'
+CHANNEL_URL = 'https://t.me/ck6lotterysg1132' 
+OWNER_USERNAME = 'shinelay1333' 
 
-TOKEN = "8185313317:AAFMPA00j7ytr6E--rX0Lh4HkXAtf0QFCj8"
-MY_ID = "-1003149589244" 
-API = "https://draw.ar-lottery01.com/TrxWinGo/TrxWinGo_1M/GetHistoryIssuePage.json"
-X_MULTIPLIERS = [1, 3, 9, 27, 81, 243, 729] 
+bot = TeleBot(BOT_TOKEN)
 
-class KyaltaryarMobileEngine:
-    def __init__(self):
-        self.last_period = None
-        self.last_pred_val = None   
-        self.current_step = 0
-        self.is_first_run = True  
-        
-        self.win_count = 0          
-        self.lose_streak = 0       
-        self.max_lose_streak = 0   
-        self.recent_history = []  
-        self.last_confidence = 0
+# ဖိုင်တွေသိမ်းမယ့် Folder လမ်းကြောင်း
+BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_files")
+os.makedirs(BASE_DIR, exist_ok=True)
 
-    def fetch_latest_results(self):
-        try:
-            url = f"{API}?pageNum=1&pageSize=12&typeId=13" 
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
-                res = json.loads(r.read().decode())
-                data = res['data']['list']
-                if not data: return None, None
-                
-                self.recent_history = []
-                for item in data:
-                    num = int(item['number'])
-                    self.recent_history.append("BIG" if num >= 5 else "SMALL")
+running_processes = {}
 
-                last_p = data[0]['issueNumber']
-                actual_bs = self.recent_history[0]
-                return last_p, actual_bs
-        except Exception as e:
-            print(f"📡 API Error: {e}")
-            return None, None
+def get_user_folder(user_id):
+    user_dir = os.path.join(BASE_DIR, str(user_id))
+    os.makedirs(user_dir, exist_ok=True)
+    return user_dir
 
-    def match_chart_patterns(self):
-        if len(self.recent_history) < 4:
-            return random.choice(["BIG", "SMALL"])
+# --- Keyboards ---
+def main_reply_keyboard():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    btn_channel = types.KeyboardButton("📢 Updates Channel")
+    btn_upload = types.KeyboardButton("📤 Upload File")
+    btn_check = types.KeyboardButton("📁 Check Files")
+    markup.add(btn_channel)
+    markup.add(btn_upload, btn_check)
+    return markup
 
-        h = self.recent_history 
+def file_control_keyboard(filename, is_running):
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    status_btn = types.InlineKeyboardButton("🛑 Stop", callback_data=f"stop_{filename}") if is_running else types.InlineKeyboardButton("🟢 Start", callback_data=f"start_{filename}")
+    markup.add(
+        status_btn,
+        types.InlineKeyboardButton("🗑️ Delete", callback_data=f"delete_{filename}"),
+        types.InlineKeyboardButton("📜 View Logs", callback_data=f"logs_{filename}"),
+        types.InlineKeyboardButton("🔙 Back to Files", callback_data="menu_check")
+    )
+    return markup
 
-        if h[0] == h[1] == h[2] == h[3] == h[4]:
-            return h[0] 
+# --- Handlers ---
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    user_id = message.from_user.id
+    user_dir = get_user_folder(user_id)
+    files = [f for f in os.listdir(user_dir) if f.endswith('.py')]
+    
+    welcome_text = (
+        f"👋 Welcome, 🌟† ʀᴏᴍᴇᴏ †🌟!\n"
+        f"🆔 Your User ID: `{user_id}`\n"
+        f"✳️ Username: @{message.from_user.username if message.from_user.username else 'None'}\n"
+        f"ℹ️ Your Status: 🆓 Free User\n"
+        f"📁 Files Uploaded: {len(files)} / 6\n\n"
+        f"🤖 Host & run Python (.py) scripts. Upload single scripts.\n\n"
+        f"👇 Use buttons or type commands."
+    )
+    bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=main_reply_keyboard())
 
-        if h[0] != h[1] and h[1] == h[2] != h[3]:
-            return "BIG" if h[0] == "SMALL" else "SMALL" 
+@bot.message_handler(func=lambda message: True)
+def handle_text_buttons(message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    user_dir = get_user_folder(user_id)
 
-        if h[0] == h[1] and h[1] != h[2] and h[2] == h[3]:
-            return "BIG" if h[0] == "SMALL" else "SMALL"
+    if message.text == "📤 Upload File":
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("📞 Contact Owner", url=f"https://t.me/{OWNER_USERNAME}"))
+        msg = bot.send_message(chat_id, "📥 Send your Python (.py) file.", reply_markup=markup)
+        bot.register_next_step_handler(msg, save_uploaded_file)
 
-        if len(h) >= 6 and h[0] == h[1] == h[2] and h[2] != h[3] and h[3] == h[4] == h[5]:
-            return "BIG" if h[0] == "SMALL" else "SMALL"
-
-        if h[1] == h[2] == h[3] and h[0] != h[1]:
-            return h[0] 
-
-        if len(h) >= 5 and h[0] == h[1] and h[2] != h[1] and h[3] == h[4] and h[3] == h[1]:
-            return h[2] 
-
-        return h[0]
-
-    def ai_consensus_meeting(self):
-        if not self.recent_history:
-            return random.choice(["BIG", "SMALL"]), 50.0
-
-        pattern_based_pred = self.match_chart_patterns()
-        
-        big_count = self.recent_history[:6].count("BIG")
-        small_count = self.recent_history[:6].count("SMALL")
-        dominant_trend = "BIG" if big_count > small_count else "SMALL"
-        opposite_trend = "SMALL" if dominant_trend == "BIG" else "BIG"
-
-        votes = []
-
-        # 1. OpenAI GPT-4o
-        votes.append(pattern_based_pred if random.random() > 0.1 else dominant_trend)
-
-        # 2. Anthropic Claude 3.5 Sonnet
-        votes.append(pattern_based_pred)
-
-        # 3. Google Gemini 1.5 Pro
-        votes.append(pattern_based_pred if (random.random() > 0.25) else opposite_trend)
-
-        # 4. DeepSeek-V3/R1
-        if self.lose_streak >= 3:
-            votes.append(opposite_trend if self.recent_history[0] == pattern_based_pred else dominant_trend)
-        else:
-            votes.append(pattern_based_pred)
-
-        # 5. Meta Llama 3.1
-        votes.append(dominant_trend)
-
-        # 6. Mistral Large 2
-        votes.append(self.recent_history[0])
-
-        # 7. Cohere Command R+
-        votes.append(pattern_based_pred)
-
-        # 8. Microsoft Copilot AI
-        votes.append(pattern_based_pred if self.lose_streak < 2 else dominant_trend)
-
-        # 9. xAI Grok 2
-        if self.lose_streak >= 3:
-            votes.append(opposite_trend)
-        else:
-            votes.append(pattern_based_pred)
-
-        # 10. Perplexity Pro
-        votes.append(dominant_trend if big_count != small_count else pattern_based_pred)
-
-        big_votes = votes.count("BIG")
-        small_votes = votes.count("SMALL")
-        
-        final_decision = "BIG" if big_votes >= small_votes else "SMALL"
-        
-        agreed_votes = max(big_votes, small_votes)
-        base_confidence = (agreed_votes / 10) * 100
-        
-        if self.lose_streak > 0:
-            confidence_adjustment = (self.lose_streak * 6)
-            final_confidence = max(51, base_confidence - confidence_adjustment)
-        else:
-            final_confidence = min(99.5, base_confidence + random.uniform(1.0, 4.5))
+    elif message.text == "📁 Check Files":
+        files = [f for f in os.listdir(user_dir) if f.endswith('.py')]
+        if not files:
+            bot.send_message(chat_id, "📂 သင့်ထံတွင် တင်ထားသော ဖိုင်မရှိသေးပါ။")
+            return
             
-        return final_decision, round(final_confidence, 2)
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        for f in files:
+            is_run = user_id in running_processes and f in running_processes[user_id]
+            status_icon = "🟢" if is_run else "🔴"
+            markup.add(types.InlineKeyboardButton(f"{status_icon} {f}", callback_data=f"manage_{f}"))
+        
+        bot.send_message(chat_id, "🗂️ Your files:\nClick to manage.", reply_markup=markup)
 
-    def send_telegram_message(self, text):
-        try:
-            url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={MY_ID}&text={urllib.parse.quote(text)}&parse_mode=HTML"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
-                pass
-        except Exception as e:
-            print(f"❌ Telegram Send Error: {e}")
+    elif message.text == "📢 Updates Channel":
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("Join Channel 📢", url=CHANNEL_URL))
+        bot.send_message(chat_id, "📣 ကျွန်ုပ်တို့၏ Channel ကို အောက်ကခလုတ်နှိပ်ပြီး Join ထားနိုင်ပါတယ်-", reply_markup=markup)
 
-# --- 🚀 MAIN RUNNER ---
-if __name__ == "__main__":
-    # Flask Server အား နောက်ကွယ်မှ စတင်မောင်းနှင်ခြင်း
-    print("🌐 Starting Keep-Alive Flask Server...")
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callbacks(call):
+    user_id = call.from_user.id
+    chat_id = call.message.chat.id
+    user_dir = get_user_folder(user_id)
+    
+    if call.data == "menu_check":
+        files = [f for f in os.listdir(user_dir) if f.endswith('.py')]
+        if not files:
+            bot.edit_message_text("📂 သင့်ထံတွင် တင်ထားသော ဖိုင်မရှိသေးပါ။", chat_id, call.message.message_id)
+            return
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        for f in files:
+            is_run = user_id in running_processes and f in running_processes[user_id]
+            status_icon = "🟢" if is_run else "🔴"
+            markup.add(types.InlineKeyboardButton(f"{status_icon} {f}", callback_data=f"manage_{f}"))
+        bot.edit_message_text("🗂️ Your files:\nClick to manage.", chat_id, call.message.message_id, reply_markup=markup)
+
+    elif call.data.startswith("manage_"):
+        filename = call.data.replace("manage_", "")
+        is_run = user_id in running_processes and filename in running_processes[user_id]
+        status_str = "Running 🟢" if is_run else "Stopped 🔴"
+        
+        text = f"⚙️ Controls for: `{filename}`\nStatus: **{status_str}**"
+        bot.edit_message_text(text, chat_id, call.message.message_id, parse_mode="Markdown", reply_markup=file_control_keyboard(filename, is_run))
+
+    elif call.data.startswith("start_"):
+        filename = call.data.replace("start_", "")
+        file_path = os.path.join(user_dir, filename)
+        log_path = os.path.join(user_dir, f"{filename}.log")
+        
+        if user_id not in running_processes:
+            running_processes[user_id] = {}
+            
+        if filename not in running_processes[user_id]:
+            try:
+                log_file = open(log_path, "w")
+                process = subprocess.Popen([sys.executable, file_path], stdout=log_file, stderr=subprocess.STDOUT, text=True)
+                running_processes[user_id][filename] = process
+                bot.answer_callback_query(call.id, f"🟢 {filename} started!")
+            except Exception as e:
+                bot.answer_callback_query(call.id, f"❌ Error: {str(e)}")
+        
+        bot.edit_message_text(f"⚙️ Controls for: `{filename}`\nStatus: **Running 🟢**", chat_id, call.message.message_id, parse_mode="Markdown", reply_markup=file_control_keyboard(filename, True))
+
+    elif call.data.startswith("stop_"):
+        filename = call.data.replace("stop_", "")
+        if user_id in running_processes and filename in running_processes[user_id]:
+            process = running_processes[user_id][filename]
+            process.terminate()
+            process.wait()
+            del running_processes[user_id][filename]
+            bot.answer_callback_query(call.id, f"🔴 {filename} stopped.")
+            
+        bot.edit_message_text(f"⚙️ Controls for: `{filename}`\nStatus: **Stopped 🔴**", chat_id, call.message.message_id, parse_mode="Markdown", reply_markup=file_control_keyboard(filename, False))
+
+    elif call.data.startswith("logs_"):
+        filename = call.data.replace("logs_", "")
+        log_path = os.path.join(user_dir, f"{filename}.log")
+        
+        if os.path.exists(log_path):
+            with open(log_path, "r") as f:
+                logs = f.read()[-1000:]
+            if not logs.strip():
+                logs = "(Log empty)"
+        else:
+            logs = "(No log found)"
+            
+        bot.send_message(chat_id, f"📜 **Logs for {filename}:**\n\n`{logs}`", parse_mode="Markdown")
+
+    elif call.data.startswith("delete_"):
+        filename = call.data.replace("delete_", "")
+        file_path = os.path.join(user_dir, filename)
+        log_path = os.path.join(user_dir, f"{filename}.log")
+        
+        if user_id in running_processes and filename in running_processes[user_id]:
+            running_processes[user_id][filename].terminate()
+            del running_processes[user_id][filename]
+            
+        if os.path.exists(file_path): os.remove(file_path)
+        if os.path.exists(log_path): os.remove(log_path)
+        
+        bot.answer_callback_query(call.id, "🗑️ File deleted.")
+        handle_callbacks(types.CallbackQuery(call.id, call.from_user, call.message, call.inline_message_id, data="menu_check"))
+
+def save_uploaded_file(message):
+    if message.document and message.document.file_name.endswith('.py'):
+        user_id = message.from_user.id
+        user_dir = get_user_folder(user_id)
+        
+        file_info = bot.get_file(message.document.file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        
+        file_path = os.path.join(user_dir, message.document.file_name)
+        with open(file_path, 'wb') as new_file:
+            new_file.write(downloaded_file)
+            
+        bot.reply_to(message, f"✅ `{message.document.file_name}` ကို အောင်မြင်စွာ လက်ခံရရှိပါပြီ။ `📁 Check Files` ကိုနှိပ်ပြီး စစ်ဆေးနိုင်ပါတယ်။", parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "❌ မှားယွင်းနေပါသည်။ `.py` ဖိုင်ကိုသာ ပို့ပေးရပါမယ်။")
+
+# --- MAIN EXECUTION ---
+if __name__ == '__main__':
+    # ၁။ Flask Server ကို Background မှာ အရင်ဦးဆုံး စမောင်းမည်
     keep_alive()
+    print("Web Server is alive!")
     
-    bot = KyaltaryarMobileEngine()
-    print("🤖 Top 10 AI Consensus Engine Activated...")
-    
-    bot.last_period, _ = bot.fetch_latest_results()
-    bot.last_pred_val, bot.last_confidence = bot.ai_consensus_meeting()
-
-    while True:
-        try:
-            curr_p, actual_bs = bot.fetch_latest_results()
-
-            if curr_p and curr_p != bot.last_period:
-                
-                if bot.is_first_run:
-                    bot.is_first_run = False
-                else:
-                    if bot.last_period and bot.last_pred_val:
-                        is_win = (actual_bs == bot.last_pred_val)
-                        
-                        if is_win:
-                            bot.win_count += 1  
-                            bot.lose_streak = 0  
-                            bot.current_step = 0
-                            
-                            win_msg = (
-                                "⚡✨🔥===============🔥✨⚡\n\n"
-                                f"<b>=======✅ 🏆 WIN {bot.win_count} 🏆=====</b>\n\n"
-                                "⚡✨🔥===============🔥✨⚡"
-                            )
-                            bot.send_telegram_message(win_msg)
-                        else:
-                            bot.lose_streak += 1 
-                            if bot.lose_streak > bot.max_lose_streak:
-                                bot.max_lose_streak = bot.lose_streak
-                            
-                            bot.current_step = min(bot.current_step + 1, len(X_MULTIPLIERS) - 1)
-
-                bot.last_pred_val, bot.last_confidence = bot.ai_consensus_meeting()
-                bot.last_period = curr_p
-                
-                next_period_num = int(curr_p) + 1
-                display_multiplier = f"<b>[ {X_MULTIPLIERS[bot.current_step]}x ]</b>" 
-                
-                streak_alert = f"\n⚠️ BAD STREAK MODE ACTIVATED" if bot.lose_streak >= 3 else ""
-                
-                signal_msg = (
-                    "=======================\n"
-                    "🎮 <b>GAME: GLOBAL TRX</b> 🎮\n"
-                    "=======================\n"
-                    f"Period : <code>{next_period_num}</code>\n"
-                    f"Predict : <b>{bot.last_pred_val}</b> ➔  {display_multiplier}\n" 
-                    f"Confidence : <b>{bot.last_confidence}%</b>\n"
-                    "=======================\n"
-                    f"⚠️ MAX LOSE STREAK : {bot.max_lose_streak}{streak_alert}"
-                )
-                bot.send_telegram_message(signal_msg)
-                
-            time.sleep(1) 
-
-        except Exception as err: 
-            time.sleep(2)
-
+    # ၂။ Telegram Bot ကို စတင်ပတ်မောင်းမည်
+    print("Bot is running perfectly...")
+    bot.infinity_polling()
