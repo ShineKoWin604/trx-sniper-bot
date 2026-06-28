@@ -4,3 +4,4 @@ httpx
 requests
 aiohttp
 beautifulsoup4
+python-telegram-bot
