@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import time
 from threading import Thread
 from flask import Flask
 from telebot import TeleBot, types
@@ -10,29 +11,27 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is running online perfectly!"
+    return "Python Host Bot is Online Perfectly!"
 
 def run_flask():
-    # Render က ပေးမယ့် PORT ကို ဖတ်မယ်၊ မရှိရင် 8080 ကို သုံးမယ်
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
 def keep_alive():
-    # Flask server ကို background thread အနေနဲ့ လှမ်း run တာဖြစ်ပါတယ်
     t = Thread(target=run_flask)
     t.start()
 
-# --- TELEGRAM BOT CONFIGURATION ---
+# --- CONFIGURATION ---
 BOT_TOKEN = '8938971304:AAG_YGMBDMJjwjF7Yuny_qiaqM7zgWP_qP8'
 CHANNEL_URL = 'https://t.me/ck6lotterysg1132' 
 OWNER_USERNAME = 'shinelay1333' 
 
 bot = TeleBot(BOT_TOKEN)
 
-# ဖိုင်တွေသိမ်းမယ့် Folder လမ်းကြောင်း
 BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_files")
 os.makedirs(BASE_DIR, exist_ok=True)
 
+# Run နေတဲ့ process တွေကို မှတ်ရန်
 running_processes = {}
 
 def get_user_folder(user_id):
@@ -40,14 +39,39 @@ def get_user_folder(user_id):
     os.makedirs(user_dir, exist_ok=True)
     return user_dir
 
-# --- Keyboards ---
+def get_bot_stats():
+    """ စာရင်းဇယားများ တွက်ချက်ရန် """
+    total_users = 0
+    total_files = 0
+    active_bots = 0
+    
+    if os.path.exists(BASE_DIR):
+        user_folders = [f for f in os.listdir(BASE_DIR) if os.path.isdir(os.path.join(BASE_DIR, f))]
+        total_users = len(user_folders)
+        for folder in user_folders:
+            folder_path = os.path.join(BASE_DIR, folder)
+            total_files += len([f for f in os.listdir(folder_path) if f.endswith('.py')])
+            
+    for u_id in running_processes:
+        active_bots += len(running_processes[u_id])
+        
+    return total_users, total_files, active_bots
+
+# --- Main Bottom Reply Keyboards (ဗီဒီယိုထဲကအတိုင်း Layout ကွက်တိ) ---
 def main_reply_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_channel = types.KeyboardButton("📢 Updates Channel")
     btn_upload = types.KeyboardButton("📤 Upload File")
     btn_check = types.KeyboardButton("📁 Check Files")
+    btn_speed = types.KeyboardButton("⚡ Bot Speed")
+    btn_stats = types.KeyboardButton("📊 Statistics")
+    btn_owner = types.KeyboardButton("📞 Contact Owner")
+    
+    # ခလုတ်များ အစီအစဉ်ချခြင်း
     markup.add(btn_channel)
     markup.add(btn_upload, btn_check)
+    markup.add(btn_speed, btn_stats)
+    markup.add(btn_owner)
     return markup
 
 def file_control_keyboard(filename, is_running):
@@ -110,6 +134,39 @@ def handle_text_buttons(message):
         markup.add(types.InlineKeyboardButton("Join Channel 📢", url=CHANNEL_URL))
         bot.send_message(chat_id, "📣 ကျွန်ုပ်တို့၏ Channel ကို အောက်ကခလုတ်နှိပ်ပြီး Join ထားနိုင်ပါတယ်-", reply_markup=markup)
 
+    elif message.text == "⚡ Bot Speed":
+        start_time = time.time()
+        # API Response ကို စမ်းသပ်ရန် စာတိုအရင်ပို့ကြည့်ခြင်း
+        msg = bot.send_message(chat_id, "⚡ Checking speed...")
+        end_time = time.time()
+        response_time = (end_time - start_time) * 1000
+        
+        speed_text = (
+            f"⚡ **Bot Speed & Status:**\n\n"
+            f"⏱️ **API Response Time:** `{response_time:.2f} ms`\n"
+            f"🚦 **Bot Status:** 🔓 Unlocked\n"
+            f"👤 **Your Level:** 🆓 Free User"
+        )
+        bot.edit_message_text(speed_text, chat_id, msg.message_id, parse_mode="Markdown")
+
+    elif message.text == "📊 Statistics":
+        t_users, t_files, a_bots = get_bot_stats()
+        user_running = len(running_processes.get(user_id, {}))
+        
+        stats_text = (
+            f"📊 **Bot Statistics:**\n\n"
+            f"👥 **Total Users:** {t_users}\n"
+            f"📂 **Total File Records:** {t_files}\n"
+            f"🟢 **Total Active Bots:** {a_bots}\n"
+            f"🤖 **Your Running Bots:** {user_running}"
+        )
+        bot.send_message(chat_id, stats_text, parse_mode="Markdown")
+
+    elif message.text == "📞 Contact Owner":
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("📞 Contact Owner", url=f"https://t.me/{OWNER_USERNAME}"))
+        bot.send_message(chat_id, "ℹ️ Click to contact Owner:", reply_markup=markup)
+
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callbacks(call):
     user_id = call.from_user.id
@@ -134,7 +191,7 @@ def handle_callbacks(call):
         status_str = "Running 🟢" if is_run else "Stopped 🔴"
         
         text = f"⚙️ Controls for: `{filename}`\nStatus: **{status_str}**"
-        bot.edit_message_text(text, chat_id, call.message.message_id, parse_mode="Markdown", reply_markup=file_control_keyboard(filename, is_run))
+        bot.edit_message_text(text, chat_id, call.message.message_id, parse_mode="Markdown", reply_markup=file_control_keyboard(filename, is_running=is_run))
 
     elif call.data.startswith("start_"):
         filename = call.data.replace("start_", "")
@@ -153,7 +210,7 @@ def handle_callbacks(call):
             except Exception as e:
                 bot.answer_callback_query(call.id, f"❌ Error: {str(e)}")
         
-        bot.edit_message_text(f"⚙️ Controls for: `{filename}`\nStatus: **Running 🟢**", chat_id, call.message.message_id, parse_mode="Markdown", reply_markup=file_control_keyboard(filename, True))
+        bot.edit_message_text(f"⚙️ Controls for: `{filename}`\nStatus: **Running 🟢**", chat_id, call.message.message_id, parse_mode="Markdown", reply_markup=file_control_keyboard(filename, is_running=True))
 
     elif call.data.startswith("stop_"):
         filename = call.data.replace("stop_", "")
@@ -164,7 +221,7 @@ def handle_callbacks(call):
             del running_processes[user_id][filename]
             bot.answer_callback_query(call.id, f"🔴 {filename} stopped.")
             
-        bot.edit_message_text(f"⚙️ Controls for: `{filename}`\nStatus: **Stopped 🔴**", chat_id, call.message.message_id, parse_mode="Markdown", reply_markup=file_control_keyboard(filename, False))
+        bot.edit_message_text(f"⚙️ Controls for: `{filename}`\nStatus: **Stopped 🔴**", chat_id, call.message.message_id, parse_mode="Markdown", reply_markup=file_control_keyboard(filename, is_running=False))
 
     elif call.data.startswith("logs_"):
         filename = call.data.replace("logs_", "")
@@ -207,16 +264,12 @@ def save_uploaded_file(message):
         with open(file_path, 'wb') as new_file:
             new_file.write(downloaded_file)
             
-        bot.reply_to(message, f"✅ `{message.document.file_name}` ကို အောင်မြင်စွာ လက်ခံရရှိပါပြီ။ `📁 Check Files` ကိုနှိပ်ပြီး စစ်ဆေးနိုင်ပါတယ်။", parse_mode="Markdown")
+        bot.reply_to(message, f"✅ `{message.document.file_name}` ကို လက်ခံရရှိပါပြီ။ `📁 Check Files` တွင် ကြည့်နိုင်ပါတယ်။", parse_mode="Markdown")
     else:
         bot.reply_to(message, "❌ မှားယွင်းနေပါသည်။ `.py` ဖိုင်ကိုသာ ပို့ပေးရပါမယ်။")
 
-# --- MAIN EXECUTION ---
 if __name__ == '__main__':
-    # ၁။ Flask Server ကို Background မှာ အရင်ဦးဆုံး စမောင်းမည်
     keep_alive()
     print("Web Server is alive!")
-    
-    # ၂။ Telegram Bot ကို စတင်ပတ်မောင်းမည်
     print("Bot is running perfectly...")
     bot.infinity_polling()
