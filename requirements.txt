@@ -1,2 +1,6 @@
 pyTelegramBotAPI
 Flask
+httpx
+requests
+aiohttp
+beautifulsoup4
