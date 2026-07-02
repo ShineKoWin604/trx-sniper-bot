@@ -5,3 +5,6 @@ requests
 aiohttp
 beautifulsoup4
 python-telegram-bot
+opencv-python
+ddddocr
+numpy
