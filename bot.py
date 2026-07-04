@@ -23,7 +23,7 @@ def keep_alive():
     t.start()
 
 # --- CONFIGURATION ---
-BOT_TOKEN = '8938971304:AAG_YGMBDMJjwjF7Yuny_qiaqM7zgWP_qP8'
+BOT_TOKEN = '8991737411:AAGzOjhZDzHbZu6LbDoimgZ1KXSShw1YudI'
 CHANNEL_URL = 'https://t.me/ck6lotterysg1132' 
 OWNER_USERNAME = 'shinelay1333' # လူကြီးမင်း၏ Telegram Username
 
