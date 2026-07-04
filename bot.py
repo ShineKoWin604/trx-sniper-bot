@@ -57,46 +57,121 @@ def get_bot_stats():
         
     return total_users, total_files, active_bots
 
-# --- 🛠️ HTML ထဲမှ JavaScript ကို Python အဖြစ်ပြောင်းလဲပြီး Run ပေးမည့် စနစ် 🛠️ ---
+# --- 🛠️ HTML ထဲမှ Data များကို ဆွဲထုတ်ပြီး Python စစ်စစ်ဖြင့် အစားထိုးမောင်းနှင်မည့် စနစ်သစ် (No js2py) ---
 def convert_and_run_html(html_path, log_path, user_id, filename):
-    """ HTML ထဲက script တွေကို Python ကနေ တိုက်ရိုက် Execute လုပ်နိုင်အောင် ကြားခံ ပတ်မောင်းပေးသည့် စနစ် """
+    """ HTML ထဲမှ Telegram Bot Token, Chat ID တို့ကို ဖတ်ယူပြီး Python Native ဖြင့် Run ပေးခြင်း """
     try:
         with open(html_path, "r", encoding="utf-8") as f:
             html_content = f.read()
 
-        # HTML ထဲက <script> ... </script> ကြားထဲက JavaScript ကုဒ်ကို ရှာဖွေဆွဲထုတ်ခြင်း
-        scripts = re.findall(r'<script\b[^>]*>(.*?)</script>', html_content, re.DOTALL)
-        js_code = "\n".join(scripts)
+        # HTML ထဲက Telegram Config များကို Regex ဖြင့် ရှာဖွေဆွဲထုတ်ခြင်း
+        bot_token_match = re.search(r'const\s+TG_BOT_TOKEN\s*=\s*["\']([^"\']+)["\']', html_content)
+        chat_id_match = re.search(r'const\s+TG_CHAT_ID\s*=\s*["\']([^"\']+)["\']', html_content)
 
-        # JavaScript ကုဒ်တွေကို Python ပေါ်မှာ တိုက်ရိုက် မောင်းနှင်ပေးနိုင်မည့် ကြားခံ Python Script အသစ်တစ်ခု ဆောက်ခြင်း
+        if not bot_token_match or not chat_id_match:
+            with open(log_path, "w") as log_f:
+                log_f.write("[-] Error: HTML ဖိုင်ထဲတွင် TG_BOT_TOKEN သို့မဟုတ် TG_CHAT_ID ကို ရှာမတွေ့ပါ။ ကုဒ်ပုံစံမှန်မမှန် စစ်ဆေးပါ။")
+            return False
+
+        tg_token = bot_token_match.group(1)
+        tg_chat = chat_id_match.group(1)
+
+        # JavaScript မလိုဘဲ Python 3.14 ပေါ်မှာ တိုက်ရိုက် အလုပ်လုပ်မည့် Script အသစ်ကို လှမ်းဆောက်ခြင်း
         bridge_py_path = html_path + "_runner.py"
         with open(bridge_py_path, "w", encoding="utf-8") as pf:
-            pf.write(f"""import js2py
+            pf.write(f"""import time
+import requests
 import urllib3
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-js_code = \"\"\"{js_code}\"\"\"
+TG_BOT_TOKEN = "{tg_token}"
+TG_CHAT_ID = "{tg_chat}"
+API_URL = "https://ckygjf6r.com/api/webapi/GetNoaverageEmerdList"
 
-print("[+] HTML Engine: Executing JavaScript Code background...")
-try:
-    # js2py သုံးပြီး javascript ကုဒ်ကို Python ထဲမှာ တိုက်ရိုက် run စေခြင်း
-    context = js2py.EvalJs()
+HEADERS = {{
+    "Accept": "application/json, text/plain, */*",
+    "Ar-Origin": "https://cklottery.cc",
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOiIxNzYyNDM5ODg1IiwibmJmIjoiMTc2MjQzOTg4NSIsImV4cCI6IjE3NjI0NDE2ODUiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL2V4cGlyYXRpb24iOiIxMS82LzIwMjUgOTozODowNSBQTSIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IkFjY2Vzc19Ub2tlbiIsIlVzZXJJZCI6IjI0MjYxMyIsIlVzZXJOYW1lIjoiOTUzMzM4ODg4NzY0IiwiVXNlclBob3RvIjoiMSIsIk5pY2tOYW1lIjoiTWVtYemek5HWjZWUFkiLCJBbW91bnQiOiI5MjQuMDAiLCJJbnRlZ3JhbCI6IjAiLCJMb2dpbk1hcmsiOiJINSIsIkxvZ2luVGltZSI6IjExLzYvMjAyNSA5OjA4OjA1IFBNIiwiTG9naW5JUEFkZHJlc3MiOiIyNDAwOmFjNDA6NjQyOjkwZGQ6ZTY4NzphNzUzOjE3ZjI6NzFkZiIsIkRiTnVtYmVyIjoiMCIsIklzdmFsaWRhdG9yIjoiMCIsIktleUNvZCodeiI0OSIsIlRva2VuVHlwZSI6IkFjY2Vzc19Ub2tlbiIsIlBob25lVHlwZSI6IjEiLCJVc2VyVHlwZSI6IjEiLCJVc2VyTmFtZTIiOiIiLCJpc3MiOiJqd3RJc3N1ZXIiLCJhdWQiOiJsb3R0ZXJ5VGlja2V0In0.RA7JBeCClF_jV5MandmeeiB1_s0E73ZAUw_01SAQLlo",
+    "Content-Type": "application/json;charset=UTF-8"
+}}
+
+MULTIPLIERS = ["1X", "3X", "9X", "27X", "81X", "243X"]
+current_step_index = 0
+last_checked_issue = None
+last_prediction = None
+
+def send_telegram_message(text):
+    url = f"https://api.telegram.org/bot{{TG_BOT_TOKEN}}/sendMessage"
+    try:
+        requests.post(url, json={{"chat_id": TG_CHAT_ID, "text": text, "parse_mode": "Markdown"}}, timeout=10)
+    except:
+        pass
+
+def predict_next_pro(data_list):
+    N = min(len(data_list), 10)
+    last_N = data_list[:N]
+    block_height = int(last_N[0]['issueNumber'][-6:])
+    block_hash = int(last_N[0]['premium'])
+    base_num = (block_height + block_hash) % 10
     
-    # HTML ထဲမှာပါတဲ့ fetch သို့မဟုတ် document တွေကို python requests နဲ့ သဟဇာတဖြစ်အောင် ကြားခံပေးခြင်း
-    context.execute(\"\"\"
-        // Browser Environment အချို့ကို ကြားခံ Simulate လုပ်ပေးခြင်း
-        var console = {{ log: function(msg) {{ print(msg); }} }};
-        var document = {{ getElementById: function() {{ return {{ style: {{}} }}; }} }};
-        setTimeout = function(fn, delay) {{ }}
-    \"\"\")
+    weighted_sum, weight_total = 0, 0
+    for i in range(N):
+        w = i + 1
+        weighted_sum += int(last_N[i]['number']) * w
+        weight_total += w
+    trend_weight = round(weighted_sum / weight_total) % 10
     
-    # JavaScript ကို တိုက်ရိုက် run ပတ်မောင်းခြင်း
-    js2py.eval_js(js_code)
-except Exception as e:
-    print("[-] Engine Error:", str(e))
+    numbers = [int(r['number']) for r in last_N]
+    avg = sum(numbers) / len(numbers)
+    volatility = round((numbers[0] - avg) / 2)
+    
+    next_num = (base_num + trend_weight + volatility + 10) % 10
+    return "BIG" if next_num >= 5 else "SMALL"
+
+def process_telegram_signal(data_list, predicted_size):
+    global last_checked_issue, last_prediction, current_step_index
+    latest_round = data_list[0]
+    latest_issue = latest_round['issueNumber']
+    actual_result = "BIG" if int(latest_round['number']) >= 5 else "SMALL"
+
+    if last_checked_issue is None:
+        last_checked_issue = latest_issue
+        last_prediction = predicted_size
+        next_issue = str(int(latest_issue) + 1)
+        send_telegram_message(f"🌌 *KYALTARYAR SKY SIGNAL*\\n\\nPeriod : {{next_issue}}\\nOrder : {{last_prediction}}    {{MULTIPLIERS[current_step_index]}}")
+        return
+
+    if latest_issue != last_checked_issue:
+        if last_prediction == actual_result:
+            send_telegram_message(f"✅ *Round {{latest_issue}} WIN!*\\nResult: {{actual_result}}")
+            current_step_index = 0
+        else:
+            send_telegram_message(f"❌ *Round {{latest_issue}} LOSS*\\nResult: {{actual_result}}")
+            current_step_index = (current_step_index + 1) % len(MULTIPLIERS)
+
+        last_checked_issue = latest_issue
+        last_prediction = predicted_size
+        next_issue = str(int(latest_issue) + 1)
+        send_telegram_message(f"🌌 *KYALTARYAR SKY SIGNAL*\\n\\nPeriod : {{next_issue}}\\nOrder : {{last_prediction}}    {{MULTIPLIERS[current_step_index]}}")
+
+def fetch_data():
+    payload = {{"pageSize": 10, "pageNo": 1, "typeId": 30, "language": 7, "random": "5d090dc13d2e4e5e92d917949bf347cd", "signature": "61C7AFD2E545705E3EBB1612C7258D39", "timestamp": 1762439985}}
+    try:
+        res = requests.post(API_URL, headers=HEADERS, json=payload, verify=False, timeout=15)
+        data_list = res.json()["data"]["list"]
+        predicted_size = predict_next_pro(data_list)
+        process_telegram_signal(data_list, predicted_size)
+    except:
+        pass
+
+print("[+] Native Engine Started successfully. Monitoring CK Wingo 30s...")
+while True:
+    fetch_data()
+    time.sleep(3)
 """)
 
-        # `.py` ဖိုင်တွေကို ပတ်မောင်းသလိုမျိုးပဲ Subprocess နဲ့ တိုက်ရိုက် Run စေခြင်း
+        # `.py` ဖိုင်ကို Subprocess ဖြင့် နောက်ကွယ်တွင် ပတ်မောင်းခြင်း
         log_file = open(log_path, "w")
         process = subprocess.Popen([sys.executable, bridge_py_path], stdout=log_file, stderr=subprocess.STDOUT, text=True)
         running_processes[user_id][filename] = process
@@ -140,9 +215,8 @@ def send_welcome(message):
     files = [f for f in os.listdir(user_dir) if (f.endswith('.py') or f.endswith('.html')) and not f.endswith('_runner.py')]
     
     welcome_text = (
-        f"👋 Welcome, 🌟† ʀᴏ模ᴏ †🌟!\n"
+        f"👋 Welcome!\n"
         f"🆔 Your User ID: `{user_id}`\n"
-        f"✳️ Username: @{message.from_user.username if message.from_user.username else 'None'}\n"
         f"ℹ️ Your Status: 🆓 Free User\n"
         f"📁 Files Uploaded: {len(files)} / 6\n\n"
         f"🤖 Host & run Python (.py) or HTML (.html) scripts backgrounds.\n\n"
@@ -235,11 +309,9 @@ def handle_callbacks(call):
             
         if filename not in running_processes[user_id]:
             if filename.endswith('.html'):
-                # HTML ဖိုင်ဖြစ်ခဲ့ရင် စနစ်သစ်နဲ့ ပြောင်းလဲ Run ပေးခြင်း
                 convert_and_run_html(file_path, log_path, user_id, filename)
-                bot.answer_callback_query(call.id, f"🟢 HTML Script {filename} Started background!")
+                bot.answer_callback_query(call.id, f"🟢 HTML Script {filename} Started!")
             else:
-                # Python ဖိုင်ဆိုရင် ပုံမှန်အတိုင်း Run ပေးခြင်း
                 log_file = open(log_path, "w")
                 process = subprocess.Popen([sys.executable, file_path], stdout=log_file, stderr=subprocess.STDOUT, text=True)
                 running_processes[user_id][filename] = process
