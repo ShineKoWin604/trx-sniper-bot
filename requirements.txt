@@ -8,3 +8,4 @@ python-telegram-bot
 opencv-python
 ddddocr
 numpy
+js2py
